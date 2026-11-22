@@ -1,0 +1,5 @@
+"""Project identity and embedded ownership metadata for ClipDude."""
+__app_name__ = "ClipDude"
+__author__ = "Tanvir"
+__copyright__ = "Copyright (c) 2026 Tanvir"
+__license__ = "MIT"

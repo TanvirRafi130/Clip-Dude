@@ -1,0 +1,24 @@
+# Copyright (c) 2026 Tanvir.
+# ClipDude local configuration
+# Edit this file to select the AI provider and default models.
+
+AI_PROVIDER=ollama
+OLLAMA_MODEL=qwen3.5:4b
+# Optional separate model for romanization; defaults to OLLAMA_MODEL.
+# ROMANIZATION_OLLAMA_MODEL=qwen3.5:4b
+# Ollama server and local model directory (normally auto-detected).
+OLLAMA_URL=http://127.0.0.1:11434
+# OLLAMA_EXE=
+# OLLAMA_MODELS=
+OLLAMA_CTX=8192
+
+# Optional cloud AI providers. Their keys remain on this computer.
+# AI_PROVIDER=gemini
+# GEMINI_API_KEY=
+# GEMINI_MODEL=gemini-3.5-flash-lite
+# AI_PROVIDER=claude
+# ANTHROPIC_API_KEY=
+# CLAUDE_MODEL=claude-sonnet-4-5
+
+# Rule-based fallback: AI_PROVIDER=none
+WHISPER_MODEL=small

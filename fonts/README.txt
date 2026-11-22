@@ -1,0 +1,1 @@
+ClipDude bundles the caption fonts listed below. Each font remains subject to its accompanying SIL Open Font License 1.1 notice.\nBangers, Anton, Bebas Neue and Poppins ExtraBold are bundled for caption rendering.\n

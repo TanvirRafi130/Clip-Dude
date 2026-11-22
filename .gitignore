@@ -1,0 +1,9 @@
+.venv/
+data/
+.profile
+__pycache__/
+*.pyc
+error/
+.DS_Store
+Thumbs.db
+.claude/

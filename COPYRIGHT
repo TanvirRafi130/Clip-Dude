@@ -1,0 +1,8 @@
+ClipDude project source and project-specific modifications
+Copyright (c) 2026 Tanvir
+
+Project identity metadata is also embedded in app/ownership.py and in the metadata
+of MP4 files rendered by ClipDude.
+
+Bundled fonts retain the licensing and attribution requirements in fonts/OFL.txt.
+Third-party Python packages and external tools remain subject to their own licenses.
