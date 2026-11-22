@@ -136,3 +136,79 @@ def test_custom_clipdude_render_options_are_saved(client):
     assert options["watermark_motion"] is True and options["part_numbers"] is True
     assert options["caption_position"] == "middle" and options["caption_min_duration"] == 0.35
     assert options["extra_instructions"] == "Prefer practical explanations."
+
+
+def test_api_accepts_full_video_subtitle_mode(client):
+    res = client.post("/api/jobs", json={
+        "url": YT,
+        "mode": "subtitles",
+        "subtitle_style": "beast",
+        "aspect": "original",
+        "start_time": 12.5,
+        "end_time": 80,
+    })
+    assert res.status_code == 200
+    options = res.json()["options"]
+    assert options["mode"] == "subtitles"
+    assert options["subtitle_style"] == "beast"
+    assert options["aspect"] == "original"
+    assert options["start_time"] == 12.5 and options["end_time"] == 80
+
+
+def test_api_rejects_unknown_subtitle_style(client):
+    res = client.post("/api/jobs", json={"url": YT, "mode": "subtitles", "subtitle_style": "rainbow"})
+    assert res.status_code == 400
+    assert "caption style" in res.text
+
+
+def test_api_rejects_overlapping_subtitle_cut_ranges(client):
+    res = client.post("/api/jobs", json={
+        "url": YT, "mode": "subtitles", "cut_ranges": [[10, 25], [20, 30]]
+    })
+    assert res.status_code == 400
+    assert "cannot overlap" in res.text
+
+
+def test_full_video_subtitle_pipeline_renders_one_continuous_range(client, monkeypatch, tmp_path):
+    from app.source import Source, Word
+
+    response = client.post("/api/jobs", json={
+        "url": YT,
+        "mode": "subtitles",
+        "subtitle_style": "beast",
+        "aspect": "original",
+        "start_time": 2,
+        "end_time": 7,
+        "cut_ranges": [[4, 5]],
+    })
+    assert response.status_code == 200
+    job_id = response.json()["id"]
+    req = client.submitted[0][1]
+    source_video = tmp_path / "source.mp4"
+    source_video.write_bytes(b"placeholder")
+    src = Source(
+        video_path=source_video,
+        title="Test full video",
+        duration=10,
+        language="en",
+        words=[Word("first", 0.2, 0.6), Word("middle", 3, 3.5), Word("last", 8, 8.5)],
+        transcript_source="whisper",
+    )
+    captured = {}
+    monkeypatch.setattr(main.source, "download", lambda *args, **kwargs: src)
+
+    def fake_render(video, words, start, end, out_dir, name, **kwargs):
+        captured.update(start=start, end=end, words=words, **kwargs)
+        return {"layout": "source", "length": end - start, "width": 640, "height": 360}
+
+    monkeypatch.setattr(main.render, "render_clip", fake_render)
+    main._run(job_id, req)
+
+    job = main._jobs[job_id]
+    assert job["status"] == "done"
+    assert job["selection"] == "subtitles"
+    assert len(job["clips"]) == 1
+    assert captured["start"] == 2 and captured["end"] == 7
+    assert captured["style"] == "beast"
+    assert captured["aspect"] == "original"
+    assert captured["keep"] == [(0.0, 2.0), (3.0, 5.0)]

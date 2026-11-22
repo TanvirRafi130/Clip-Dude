@@ -1,4 +1,9 @@
 # Copyright (c) 2026 Tanvir. ClipDude project tests.
+import shutil
+import subprocess
+
+import pytest
+
 from app import render
 from app.source import Word
 
@@ -85,3 +90,40 @@ def test_caption_position_and_minimum_hold_are_configurable():
     events = [line for line in ass.splitlines() if line.startswith("Dialogue: 0,")]
     assert len(events) == 2
     assert "0:00:00.35" in events[0]
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="needs ffmpeg")
+def test_timecode_cut_ranges_stitch_kept_video_and_retime_captions(tmp_path):
+    src = tmp_path / "cuts_src.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=640x360:rate=30",
+         "-f", "lavfi", "-i", "sine=frequency=500:duration=4", "-shortest", "-c:v", "libx264", "-preset", "ultrafast", str(src)],
+        check=True,
+    )
+    words = [Word("first", 0.2, 0.6), Word("removed", 1.4, 1.8), Word("last", 3.2, 3.6)]
+    render.render_clip(
+        src, words, 0, 4, tmp_path, "cuts_out", aspect="original",
+        keep=[(0.0, 1.0), (3.0, 4.0)],
+    )
+    out = tmp_path / "cuts_out.mp4"
+    duration = float(subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(out)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip())
+    assert 1.8 <= duration <= 2.3
+    assert render._probe_size(out) == (640, 360)
+    ass_text = render.build_ass([Word("last", 0.2, 0.6)], 0, 1.0, "yellow", None)
+    assert "LAST" in ass_text
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="needs ffmpeg")
+def test_original_aspect_keeps_source_dimensions(tmp_path):
+    src = tmp_path / "original_src.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=640x360:rate=24",
+         "-f", "lavfi", "-i", "sine=duration=2", "-shortest", "-c:v", "libx264", "-preset", "ultrafast", str(src)],
+        check=True,
+    )
+    words = [Word("keep", 0.2, 0.6), Word("everything.", 0.7, 1.1)]
+    render.render_clip(src, words, 0, 1.5, tmp_path, "original_out", aspect="original")
+    assert render._probe_size(tmp_path / "original_out.mp4") == (640, 360)

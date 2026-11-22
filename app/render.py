@@ -414,10 +414,15 @@ def render_clip(
     `keep`: parts of the clip to keep, in seconds from its start (see trim.py);
     everything else (pauses, fillers) is cut and the captions re-timed."""
     clip_len = end - start
-    W, H = ASPECTS.get(aspect, ASPECTS[DEFAULT_ASPECT])
+    src_w, src_h = _probe_size(video)
+    if aspect == "original":
+        # Keep the source frame and resolution (rounded down only if a codec
+        # requires even dimensions). The whole picture remains visible.
+        W, H = max(2, src_w // 2 * 2), max(2, src_h // 2 * 2)
+    else:
+        W, H = ASPECTS.get(aspect, ASPECTS[DEFAULT_ASPECT])
     clip_words = [w for w in words if w.end > start and w.start < end]
     ass_name = f"{name}.ass"
-    src_w, src_h = _probe_size(video)
     src_r, out_r = src_w / src_h, W / H
     # Source already (close to) the target shape: just scale and trim the edges.
     # For 9:16 anything at or narrower than 0.6 qualifies, as before.
@@ -525,4 +530,4 @@ def render_clip(
     )
     (out_dir / ass_name).unlink(missing_ok=True)
     shutil.rmtree(fonts, ignore_errors=True)
-    return {"layout": used, "length": round(out_len, 2)}
+    return {"layout": used, "length": round(out_len, 2), "width": W, "height": H}

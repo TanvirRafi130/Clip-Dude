@@ -4,6 +4,7 @@ background, and serves progress and finished clips to the page."""
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -78,6 +79,7 @@ class JobRequest(BaseModel):
     ai_model: str = ""
     start_time: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     end_time: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    cut_ranges: list[tuple[float, float]] = Field(default_factory=list, max_length=100)
     aspect: str = "9:16"
     trim_pauses: bool = True
     romanize_captions: bool = False
@@ -86,6 +88,7 @@ class JobRequest(BaseModel):
     mode: str = "ai"
     segment_seconds: int = Field(default=60, ge=1)
     split_style: str = "yellow"
+    subtitle_style: str = "yellow"
     part_numbers: bool = False
     watermark: str = Field(default="", max_length=80)
     watermark_position: str = "bottom-right"
@@ -216,7 +219,7 @@ def _run(job_id: str, req: JobRequest) -> None:
             progress(34, "Romanizing non-English captions")
             caption_words = romanize.romanize_words(src.words, req.romanization_style, model=req.romanization_model.strip() or config.ROMANIZATION_OLLAMA_MODEL)
 
-        progress(42, "Finding the best moments")
+        progress(42, "Preparing full-video subtitles" if req.mode == "subtitles" else "Finding the best moments")
         sentences = selector.within(selector.to_sentences(src.words), req.start_time, req.end_time)
         if req.mode == "split":
             # Sequential, equal-duration segments across the entire source video.
@@ -234,6 +237,26 @@ def _run(job_id: str, req: JobRequest) -> None:
                 ))
                 cursor = seg_end
             method, warning = "sequential", None
+        elif req.mode == "subtitles":
+            # One continuous output: no AI selection, splitting, pause trimming or
+            # omitted footage. Optional From/To values are an explicit range trim.
+            total = src.duration or (src.words[-1].end if src.words else 0)
+            start = float(req.start_time or 0.0)
+            end = float(req.end_time if req.end_time is not None else total)
+            if end <= start or end <= 0:
+                raise RuntimeError("Could not determine a valid video duration for subtitle rendering.")
+            if total and start >= total:
+                raise RuntimeError("The subtitle start time is beyond the end of the video.")
+            if total:
+                end = min(end, total)
+            if end <= start:
+                raise RuntimeError("The subtitle end time must be after the start time and within the video.")
+            clips = [selector.Clip(
+                start=start, end=end, title="Full video with subtitles", hook="", score=0,
+                reason="", description="One continuous source video with burned-in subtitles.",
+                hashtags=[]
+            )]
+            method, warning = "subtitles", None
         else:
             clips, method, warning = selector.select(
                 sentences, src.title, req.clip_count, req.min_len, req.max_len, progress, prompt=req.prompt, model=req.ai_model.strip() or config.OLLAMA_MODEL, extra_instructions=req.extra_instructions
@@ -253,17 +276,33 @@ def _run(job_id: str, req: JobRequest) -> None:
         done: list[dict] = []
         for i, clip in enumerate(clips):
             progress(45 + 54 * i / len(clips), f"Rendering clip {i + 1} of {len(clips)}")
-            if req.mode == "split":
+            if req.mode in ("split", "subtitles"):
                 start, end = clip.start, clip.end
             else:
                 start, end = _render_bounds(
                     clip.start, clip.end, src.words, src.duration, req.start_time, req.end_time
                 )
             name = f"clip_{i + 1:02d}"
-            keep = trim.plan(src.video_path, src.words, start, end) if (req.trim_pauses and req.mode == "ai") else None
+            if req.trim_pauses and req.mode == "ai":
+                keep = trim.plan(src.video_path, src.words, start, end)
+            elif req.mode == "subtitles" and req.cut_ranges:
+                # User-defined cut ranges are source-video timestamps. Convert
+                # them to the clip's local timeline, then keep and stitch the rest.
+                cuts = []
+                for cut_start, cut_end in req.cut_ranges:
+                    left, right = max(start, cut_start), min(end, cut_end)
+                    if right > left:
+                        cuts.append((left - start, right - start))
+                keep = trim.keep_segments(end - start, cuts, pad=0.0, min_cut=0.01) if cuts else None
+                if cuts and not keep:
+                    raise RuntimeError("The selected cuts remove the entire output range. Keep at least one part of the video.")
+                if keep == [(0.0, round(end - start, 3))]:
+                    keep = None
+            else:
+                keep = None
             info = render.render_clip(
                 src.video_path, caption_words, start, end, workdir, name,
-                style=(req.split_style if req.mode == "split" else req.style), layout=req.layout, hook=(romanize.romanize_text(clip.hook, req.romanization_style, req.romanization_model.strip() or config.ROMANIZATION_OLLAMA_MODEL) if req.romanize_captions else clip.hook) if req.hook else None, aspect=req.aspect,
+                style=(req.split_style if req.mode == "split" else req.subtitle_style if req.mode == "subtitles" else req.style), layout=req.layout, hook=(romanize.romanize_text(clip.hook, req.romanization_style, req.romanization_model.strip() or config.ROMANIZATION_OLLAMA_MODEL) if req.romanize_captions else clip.hook) if req.hook else None, aspect=req.aspect,
                 keep=keep,
                 caption_position=req.caption_position,
                 caption_max_words=req.caption_max_words,
@@ -272,7 +311,7 @@ def _run(job_id: str, req: JobRequest) -> None:
                 watermark=req.watermark,
                 watermark_position=req.watermark_position,
                 watermark_motion=req.watermark_motion,
-                part_label=(f"PART {i + 1:02d} / {len(clips):02d}" if req.part_numbers else ""),
+                part_label=(f"PART {i + 1:02d} / {len(clips):02d}" if req.part_numbers and req.mode != "subtitles" else ""),
             )
             done.append(
                 asdict(clip)
@@ -283,7 +322,8 @@ def _run(job_id: str, req: JobRequest) -> None:
                     "video": f"/media/{job_id}/{name}.mp4",
                     "thumb": f"/media/{job_id}/{name}.jpg",
                     "layout": info["layout"],
-                    "aspect": req.aspect,
+                    "aspect": (f"{info['width']}:{info['height']}" if req.aspect == "original" and info.get("width") and info.get("height") else req.aspect),
+                    "aspect_label": ("Original" if req.aspect == "original" else req.aspect),
                 }
             )
             _update(job_id, clips=list(done))
@@ -325,19 +365,28 @@ def list_models() -> dict:
 
 
 def _check_options(req: JobRequest) -> None:
-    if req.min_len >= req.max_len:
+    if req.mode == "ai" and req.min_len >= req.max_len:
         raise HTTPException(400, "Minimum length must be shorter than maximum length.")
-    if req.style not in render.STYLES or req.split_style not in render.STYLES:
+    if req.style not in render.STYLES or req.split_style not in render.STYLES or req.subtitle_style not in render.STYLES:
         raise HTTPException(400, "Unknown caption style.")
     if req.layout not in ("auto", "fill", "fit", "split"):
         raise HTTPException(400, "Unknown layout.")
     if req.start_time is not None and req.end_time is not None and req.end_time <= req.start_time:
         raise HTTPException(400, "The 'To' time must be after the 'From' time.")
-    if req.aspect not in render.ASPECTS:
+    if req.cut_ranges and req.mode != "subtitles":
+        raise HTTPException(400, "Cut ranges are only available in full-video subtitle mode.")
+    previous_end = -1.0
+    for cut_start, cut_end in sorted(req.cut_ranges):
+        if not (math.isfinite(cut_start) and math.isfinite(cut_end)) or cut_start < 0 or cut_end <= cut_start:
+            raise HTTPException(400, "Each cut range must have a valid start and a later end time.")
+        if cut_start < previous_end:
+            raise HTTPException(400, "Cut ranges cannot overlap. Combine or adjust overlapping ranges.")
+        previous_end = cut_end
+    if req.aspect not in render.ASPECTS and req.aspect != "original":
         raise HTTPException(400, "Unknown aspect ratio.")
-    if req.mode not in ("ai", "split"):
+    if req.mode not in ("ai", "split", "subtitles"):
         raise HTTPException(400, "Unknown processing mode.")
-    if req.segment_seconds < 1:
+    if req.mode == "split" and req.segment_seconds < 1:
         raise HTTPException(400, "Segment duration must be at least one second.")
     if req.watermark_position not in ("top-left", "top-right", "bottom-left", "bottom-right"):
         raise HTTPException(400, "Unknown watermark position.")
@@ -393,6 +442,7 @@ async def upload_job(
     prompt: str = Form(""),
     start_time: float | None = Form(None),
     end_time: float | None = Form(None),
+    cut_ranges: str = Form("[]"),
     aspect: str = Form("9:16"),
     trim_pauses: bool = Form(True),
     romanize_captions: bool = Form(False),
@@ -401,6 +451,7 @@ async def upload_job(
     mode: str = Form("ai"),
     segment_seconds: int = Form(60),
     split_style: str = Form("yellow"),
+    subtitle_style: str = Form("yellow"),
     part_numbers: bool = Form(False),
     watermark: str = Form(""),
     watermark_position: str = Form("bottom-right"),
@@ -418,17 +469,22 @@ async def upload_job(
     if ext not in _VIDEO_EXTS:
         raise HTTPException(400, "Please upload a video file: mp4, mov, mkv or webm.")
     try:
+        parsed_cut_ranges = json.loads(cut_ranges or "[]")
+        if not isinstance(parsed_cut_ranges, list):
+            raise ValueError("Cut ranges must be a JSON list.")
         req = JobRequest(url="", clip_count=clip_count, min_len=min_len, max_len=max_len,
                          style=style, layout=layout, hook=hook,
-                         prompt=prompt, start_time=start_time, end_time=end_time, aspect=aspect,
+                         prompt=prompt, start_time=start_time, end_time=end_time, cut_ranges=parsed_cut_ranges, aspect=aspect,
                          trim_pauses=trim_pauses, romanize_captions=romanize_captions,
                          romanization_style=romanization_style, romanization_model=romanization_model,
                          mode=mode, segment_seconds=segment_seconds, split_style=split_style,
-                          part_numbers=part_numbers, watermark=watermark,
+                         subtitle_style=subtitle_style, part_numbers=part_numbers, watermark=watermark,
                           watermark_position=watermark_position, watermark_motion=watermark_motion,
                           caption_position=caption_position, caption_max_words=caption_max_words,
                           caption_max_chars=caption_max_chars, caption_min_duration=caption_min_duration, extra_instructions=extra_instructions,
                           ai_model=ai_model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
     except ValidationError as exc:
         raise HTTPException(422, str(exc)) from None
     _check_options(req)

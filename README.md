@@ -1,6 +1,6 @@
 # ClipDude
 
-**ClipDude is a local-first video clipping and captioning studio.** Turn a long video into AI-selected highlights or split the complete video into sequential, captioned parts. Choose the output aspect ratio, caption style, caption pacing, watermark, and AI model, then export MP4 files locally.
+**ClipDude is a local-first video clipping and captioning studio.** Turn a long video into AI-selected highlights, split the complete video into sequential captioned parts, or keep one continuous video and add subtitles. Choose the output aspect ratio, caption style, caption pacing, watermark, and AI model, then export MP4 files locally.
 
 **Project owner:** Tanvir  
 **Copyright:** Copyright (c) 2026 Tanvir  
@@ -27,7 +27,17 @@ ClipDude does not include a social-platform publishing or account-connection fea
 - Select a caption style separately from the AI-selected clip style.
 - Optionally burns a `PART 01 / 08` sequence label into each exported segment.
 
-### 3. Caption studio
+### 3. Full video subtitles
+- Adds burned-in subtitles to one continuous output instead of selecting highlights or splitting the source.
+- Processes the complete source by default, from the first frame to the end.
+- Optional Start / End values keep one continuous time range when you only need part of the source.
+- Add multiple **Remove from / Remove to** timecode ranges to delete unwanted sections; the remaining parts are joined in order into one output video.
+- Cut times refer to the original source video's timeline. When a Start / End trim is also set, cuts outside that trim range are ignored and cuts inside it are applied.
+- Has its own caption-style selection, while also supporting shared caption controls, romanization, watermark, framing, and output settings.
+- Choose the **Original** aspect option to retain the source frame and resolution rather than converting it to a Shorts ratio.
+- The cut controls are a practical timecode-based editor, not a visual drag-and-drop timeline or frame-by-frame preview.
+
+### 4. Caption studio
 - Twelve built-in caption looks, including bold yellow, green pop, comic, impact, tall, clean white, progressive reveal, electric cyan, neon pink, minimal subtitle, neon glow, and classic subtitle.
 - Choose lower-third, center, or upper-third caption placement.
 - Control the number of words grouped together and the maximum caption line length.
@@ -35,15 +45,15 @@ ClipDude does not include a social-platform publishing or account-connection fea
 - Romanize non-Latin captions into Latin letters without translating the language.
 - Select a separate installed Ollama model for romanization.
 
-### 4. Branding and output
+### 5. Branding and output
 - Burn a text watermark into the entire rendered video.
 - Pin the watermark to any corner or animate it around the frame.
-- Choose from eight output ratios: `9:16`, `3:4`, `4:5`, `1:1`, `5:4`, `4:3`, `16:9`, and `21:9`.
+- Choose from eight fixed output ratios (`9:16`, `3:4`, `4:5`, `1:1`, `5:4`, `4:3`, `16:9`, and `21:9`) or **Original** to retain the source frame.
 - Preview videos without cropping their aspect ratio in the dashboard.
 - Download individual clips or a ZIP containing all finished clips.
 - MP4 files include embedded copyright/creator metadata identifying Tanvir and ClipDude.
 
-### 5. Local-first processing
+### 6. Local-first processing
 - Video files are processed on your computer.
 - Ollama is the default local AI provider and does not require an API key.
 - Whisper transcription is used when suitable source captions are not available. Silent videos can still be sequentially split; AI highlight selection requires a usable transcript.
@@ -55,13 +65,56 @@ ClipDude does not include a social-platform publishing or account-connection fea
 
 | Requirement | Purpose |
 |---|---|
-| Python 3.10 or newer | Web application and processing pipeline |
+| Python 3.12 | Recommended and tested Python version for dependency wheel compatibility |
 | FFmpeg + FFprobe | Video/audio inspection, cutting, caption burn-in and encoding |
 | Ollama (recommended) | Local AI clip selection and romanization |
 | Internet connection | Required for downloading a video from a public URL and installing dependencies/models |
 | Sufficient free disk space | Source videos, temporary files, rendered clips and Whisper models |
 
 A GPU is optional. CPU-only processing works, but transcription and rendering can take substantially longer. Longer videos require more time and temporary storage. ClipDude does not impose a fixed four-hour source-duration ceiling or a fixed application-level upload byte ceiling; practical limits are determined by your hardware, disk space, codecs, and available memory.
+
+### Python version and Windows dependency installation
+
+Use **Python 3.12** for the ClipDude environment. A fresh `pip install -r requirements.txt` was tested on a machine running Python 3.15 and failed because the transcription dependency stack did not have compatible prebuilt wheels for that Python version. In particular, `faster-whisper` depends on `av` (PyAV). Pip fell back to building PyAV from source, which failed for two separate reasons:
+
+1. Older PyAV source releases (10.x / 11.x / 12.x) use Cython callback declarations that are incompatible with the newer Cython syntax available in that environment. This caused a `CompileError` in `av/logging.pyx`.
+2. After trying a newer PyAV source release, the build still stopped with `Microsoft Visual C++ 14.0 or greater is required`. Building PyAV from source on Windows requires the Visual C++ Build Tools.
+
+The solution used for this project was **not** to install a C++ compiler. Instead, Python 3.12 was used because compatible prebuilt wheels were available for the required packages, including PyAV, `ctranslate2`, and `tokenizers`. This avoids compiling those packages locally. Do not use Python 3.15 for this project environment; use a newer Python version only after confirming that wheels are available for every dependency in `requirements.txt`.
+
+First, check which Python runtimes the Windows launcher detects:
+
+```powershell
+py -0
+```
+
+Create a fresh environment explicitly with Python 3.12, then install the dependencies:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+On Linux / macOS, use the Python 3.12 executable explicitly:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If `.venv` was created with Python 3.15 (or another interpreter you no longer want to use), delete that virtual-environment folder and recreate it with the commands above. On Windows, `py -0` lists the interpreter versions registered with the launcher, and `py -3.12 ...` explicitly targets Python 3.12 even when multiple versions are installed.
+
+**Advanced cleanup note — Python Install Manager:** Python 3.15 may have been installed through the newer Python Install Manager rather than the classic MSI / winget installer. In that case, its runtime registration can be stored under `HKEY_CURRENT_USER\Software\Python\PythonCore\<version>`, and it may not appear in the usual Installed Apps list. If the runtime folder was manually deleted before running `py uninstall`, the uninstall command may try to launch the now-missing executable and fail. Prefer the Install Manager's supported uninstall / repair flow whenever the runtime is still present. Only when you have already confirmed that the Python 3.15 runtime folder is gone and the registration is stale, remove that registration from Command Prompt with:
+
+```powershell
+reg delete "HKEY_CURRENT_USER\Software\Python\PythonCore\3.15" /f
+```
+
+This command edits the current user's registry. Do not run it for a working Python installation or just to resolve an ordinary pip error. After cleanup, verify the available runtimes again with `py -0`.
 
 ### Install FFmpeg
 
@@ -107,9 +160,9 @@ You may use any model already installed in Ollama that follows structured JSON i
 ### Windows
 
 1. Extract the complete ClipDude project folder to a location with enough free disk space.
-2. Install Python 3.10+ and FFmpeg.
+2. Install **Python 3.12** and FFmpeg.
 3. Install Ollama if you want local AI selection and romanization.
-4. Double-click `setup.bat`.
+4. Double-click `setup.bat`. It explicitly creates the environment with Python 3.12.
 5. Open `.profile` in a text editor and review the settings.
 6. Double-click `run.bat`.
 7. Open `http://127.0.0.1:8765` in your browser if it does not open automatically.
@@ -117,7 +170,7 @@ You may use any model already installed in Ollama that follows structured JSON i
 ### Linux / macOS
 
 1. Extract the complete project folder.
-2. Install Python 3.10+, FFmpeg, and optionally Ollama.
+2. Install Python 3.12, FFmpeg, and optionally Ollama.
 3. Open a terminal in the project directory.
 4. Run:
    ```bash
@@ -135,8 +188,14 @@ You may use any model already installed in Ollama that follows structured JSON i
 
 If you prefer to install the environment yourself:
 
+**Windows (PowerShell or Command Prompt)**
+```powershell
+py -3.12 -m venv .venv
+```
+
+**Linux / macOS**
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 ```
 
 Activate the environment:
@@ -229,6 +288,17 @@ The app accepts a local file without a URL. Video URL downloads use the source d
 7. Set caption pacing, romanization, and watermark options.
 8. Press **Get clips**.
 
+### Full video subtitles
+1. Choose **Full video subtitles**.
+2. Pick a subtitle style. This style is independent from the AI-selected and sequential-split styles.
+3. Leave Start / End empty to process the full source. Or enter a range such as `00:30` and `05:20` to process only that continuous section.
+4. Under **Remove unwanted sections**, add as many timecode ranges as needed. For example, enter `01:10` to `01:24` to remove that section. The timecodes use the original video timeline; any cuts outside the optional Start / End trim are ignored.
+5. Configure the shared caption controls, romanization, watermark, framing, and aspect ratio.
+6. Choose **Original** under Aspect ratio to preserve the source dimensions and show the full source frame.
+7. Press **Add subtitles to full video**.
+
+This mode creates one output video. It does not select highlights or divide the video into parts. It can remove multiple user-specified time ranges and join the remaining footage in order. The editor uses timecode fields rather than a visual drag-and-drop timeline or frame-by-frame preview.
+
 ### Split entire video
 1. Choose **Split entire video**.
 2. Set the segment duration in seconds.
@@ -253,6 +323,9 @@ Enter the exact text to burn into the output. Select one of the four corners, or
 
 ### Processing queue
 Only one source video is processed at a time. The interface disables starting another job while the active job is running. This avoids multiple simultaneous model loads and competing video encodes.
+
+### Saved settings
+ClipDude remembers form settings in the current browser, including the last selected processing tab, caption styles, aspect ratio, caption pacing, romanization, watermark, and model selections. These preferences are restored after restarting the app or reopening the page. The selected video file and source URL are not saved.
 
 ### Results
 - Play the preview directly in the dashboard.
@@ -293,6 +366,12 @@ ClipDude/
 ---
 
 ## Troubleshooting
+
+**`pip install -r requirements.txt` fails while installing `av` / `faster-whisper` on Windows**
+- Confirm that the virtual environment uses Python 3.12: `py -3.12 -c "import sys; print(sys.version)"`.
+- If `.venv` was created with Python 3.15 or another incompatible runtime, delete `.venv` and recreate it with `py -3.12 -m venv .venv`.
+- Activate `.venv` and reinstall with `python -m pip install -r requirements.txt`.
+- Do not try to solve a missing-wheel build failure by repeatedly pinning old PyAV releases; those can hit the Cython compile error described above. A source build may also require Visual C++ Build Tools, which this Python 3.12 setup avoids when compatible wheels are available.
 
 **The app says FFmpeg or FFprobe is missing**
 - Install FFmpeg and ensure both commands are on `PATH`.

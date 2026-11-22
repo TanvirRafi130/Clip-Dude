@@ -51,6 +51,24 @@ def test_upload_carries_aspect(client):
     assert second.status_code == 200 and second.json()["options"]["aspect"] == "4:5"
 
 
+def test_upload_carries_full_video_subtitle_options_and_cut_ranges(client):
+    res = _upload(
+        client,
+        mode="subtitles",
+        subtitle_style="beast",
+        aspect="original",
+        start_time="30",
+        end_time="300",
+        cut_ranges='[[70, 85], [120, 140]]',
+    )
+    assert res.status_code == 200
+    options = res.json()["options"]
+    assert options["mode"] == "subtitles"
+    assert options["subtitle_style"] == "beast"
+    assert options["aspect"] == "original"
+    assert options["cut_ranges"] == [[70.0, 85.0], [120.0, 140.0]]
+
+
 def test_upload_rejects_backwards_time_range(client):
     res = _upload(client, start_time="600", end_time="60")
     assert res.status_code == 400 and "'To' time" in res.json()["detail"]

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="author" content="Tanvir">
 <meta name="copyright" content="Copyright (c) 2026 Tanvir">
-<title>ClipDude — Video Clipping Studio</title>
+<title>ClipDude — Video Clipping & Subtitle Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -49,9 +49,12 @@
   .mode-tabs { display:flex; gap:8px; max-width:1040px; margin:20px auto -16px; position:relative; z-index:1; }
   .mode-tab { padding:12px 18px; border:1px solid var(--line); background:var(--panel-2); color:var(--muted); font-weight:700; border-radius:12px 12px 0 0; }
   .mode-tab.active { background:var(--panel); color:var(--accent); border-bottom-color:var(--panel); }
-  .split-only { display:none; }
+  .split-only, .subtitle-only { display:none; }
   body.split-mode .ai-only { display:none !important; }
   body.split-mode .split-only { display:block; }
+  body.subtitles-mode .ai-only, body.subtitles-mode .split-only { display:none !important; }
+  body.subtitles-mode .subtitle-only { display:block; }
+  body.subtitles-mode .part-number-setting { display:none; }
   form { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; max-width: 1040px; margin: 26px auto 0; }
   .lbl, .opts label, .focus label { display: block; font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
   .row { display: flex; gap: 10px; }
@@ -94,7 +97,13 @@
   .check input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); cursor: pointer; }
   .focus { display: grid; grid-template-columns: 1fr 120px 120px; gap: 14px; }
   .hint { font-size: 13.5px; color: var(--muted); margin: 8px 0 0; }
-  @media (max-width: 560px) { .focus { grid-template-columns: 1fr 1fr; } .focus > :first-child { grid-column: 1 / -1; } }
+  .range2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .cut-list { display:grid; gap:10px; margin-top:10px; }
+  .cut-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; }
+  .cut-row label { display:block; color:var(--muted); font-size:12px; margin:0 0 4px; }
+  .cut-remove { min-height:44px; padding:0 12px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); }
+  .cut-add { min-height:42px; margin-top:10px; padding:0 14px; border:1px solid var(--line); background:var(--panel-2); color:var(--accent); font-weight:700; }
+  @media (max-width: 560px) { .focus { grid-template-columns: 1fr 1fr; } .focus > :first-child { grid-column: 1 / -1; } .range2 { grid-template-columns:1fr 1fr; } .cut-row { grid-template-columns:1fr 1fr; } .cut-row .cut-remove { grid-column:1 / -1; justify-self:start; } }
   .formerr { color: var(--bad); margin: 12px 2px 0; font-size: 15px; }
   .formerr:empty { display: none; }
 
@@ -393,13 +402,14 @@
 
   <main>
   <div class="hero">
-    <h1>One long video in.<br><em>A batch of Shorts</em> out.</h1>
-    <p>Choose AI-selected highlights or split the entire video into consecutive captioned parts. Use a video URL or upload a local video file.</p>
+    <h1>One video in.<br><em>Your format out.</em></h1>
+    <p>Create AI-selected clips, split a video into parts, or keep the full video and add subtitles. Use a video URL or upload a local file.</p>
   </div>
 
   <div class="mode-tabs" role="tablist" aria-label="Video processing mode">
     <button type="button" class="mode-tab active" id="tabAI" role="tab" aria-selected="true" aria-controls="form">AI-selected clips</button>
     <button type="button" class="mode-tab" id="tabSplit" role="tab" aria-selected="false" aria-controls="form">Split entire video</button>
+    <button type="button" class="mode-tab" id="tabSubtitles" role="tab" aria-selected="false" aria-controls="form">Full video subtitles</button>
   </div>
   <form id="form" novalidate aria-label="Make clips">
     <label class="lbl" for="url">Public YouTube video URL</label>
@@ -446,22 +456,13 @@
         <select id="aiModel"><option value="">Loading installed models…</option></select>
         <p class="hint">The selected model is fixed for the submitted job. Changing it while a job is running only affects the next job.</p>
       </div>
-      <div class="setting">
-        <label for="layout">Framing</label>
-        <select id="layout">
-          <option value="auto" selected>Auto</option>
-          <option value="fill">Fill, follow the speaker</option>
-          <option value="fit">Fit, blurred background</option>
-          <option value="split">Split: facecam + gameplay</option>
-        </select>
-      </div>
     </div>
     <div class="settings ai-only" style="margin-top:14px">
       <div class="setting"><label for="customCount">Custom number of clips (optional)</label><input type="number" id="customCount" min="1" step="1" placeholder="Use preset above"></div>
       <div class="setting"><label>Custom clip length (seconds)</label><div class="row"><input type="number" id="customMin" min="1" placeholder="Min"><input type="number" id="customMax" min="2" placeholder="Max"></div></div>
       <p class="hint" style="grid-column:1/-1">Custom values override the presets. Practical limits depend on your PC, available storage and source duration.</p>
     </div>
-    <div class="switches">
+    <div class="switches ai-only">
       <label class="switch"><span><b>Hook text at the start</b><small>A short line on screen in the first seconds</small></span><input type="checkbox" role="switch" id="hook" checked></label>
       <label class="switch"><span><b>Remove pauses and "uh"/"um"</b><small>Tighter pacing, same words</small></span><input type="checkbox" role="switch" id="trim" checked></label>
     </div>
@@ -473,6 +474,7 @@
         <fieldset class="setting wide">
           <legend>Aspect ratio</legend>
           <div class="seg seg-icons">
+            <label><input type="radio" name="aspect" value="original"><span><i class="ar" style="width:22px;height:15px"></i><b>Original</b><small>Keep source</small></span></label>
             <label><input type="radio" name="aspect" value="9:16" checked><span><i class="ar" style="width:11px;height:19px"></i><b>9:16</b><small>Vertical</small></span></label>
             <label><input type="radio" name="aspect" value="3:4"><span><i class="ar" style="width:13px;height:18px"></i><b>3:4</b><small>Portrait</small></span></label>
             <label><input type="radio" name="aspect" value="4:5"><span><i class="ar" style="width:14px;height:18px"></i><b>4:5</b><small>Feed</small></span></label>
@@ -483,7 +485,41 @@
             <label><input type="radio" name="aspect" value="21:9"><span><i class="ar" style="width:24px;height:10px"></i><b>21:9</b><small>Cinema</small></span></label>
           </div>
         </fieldset>
+        <div class="setting">
+          <label for="layout">Framing</label>
+          <select id="layout">
+            <option value="auto" selected>Auto</option>
+            <option value="fill">Fill, follow the speaker</option>
+            <option value="fit">Fit, blurred background</option>
+            <option value="split">Split: facecam + gameplay</option>
+          </select>
+        </div>
       </div>
+    </div>
+
+    <div class="sect subtitle-only" id="subtitleOptions">
+      <h2 class="sect-h">Full-video subtitle settings</h2>
+      <div class="settings">
+        <fieldset class="setting wide">
+          <legend>Subtitle style <span class="legend-note">Choose how the burned-in captions look</span></legend>
+          <div class="capstyles" id="subtitleStyle"></div>
+        </fieldset>
+        <div class="setting wide">
+          <label>Optional trim range</label>
+          <div class="range2">
+            <div><label for="subtitleFrom">Start at</label><input type="text" id="subtitleFrom" placeholder="mm:ss" autocomplete="off"></div>
+            <div><label for="subtitleTo">End at</label><input type="text" id="subtitleTo" placeholder="mm:ss" autocomplete="off"></div>
+          </div>
+          <p class="hint">Leave both fields empty to subtitle the entire video. The trim range is applied before the optional cuts below.</p>
+        </div>
+        <div class="setting wide">
+          <label>Remove unwanted sections (optional)</label>
+          <div id="subtitleCuts" class="cut-list" aria-live="polite"></div>
+          <button type="button" class="cut-add" id="addSubtitleCut">+ Add a section to remove</button>
+          <p class="hint">Enter source-video timestamps (for example, 01:10 to 01:24). You can remove multiple sections; the remaining footage is joined into one continuous output. Leave this empty to keep everything within the selected trim range.</p>
+        </div>
+      </div>
+      <p class="hint">This mode does not select highlights or split into parts. Choose <b>Original</b> under Aspect ratio to keep the source frame and resolution. The cut controls are a timecode-based editor, not a drag-and-drop timeline.</p>
     </div>
 
     <div class="sect split-only" id="splitOptions">
@@ -544,7 +580,7 @@
         <div class="setting"><label for="watermarkPosition">Placement</label><select id="watermarkPosition"><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right" selected>Bottom right</option></select></div>
       </div>
       <label class="switch"><span><b>Move watermark around the frame</b><small>Animate the watermark around the video instead of pinning it to one corner.</small></span><input type="checkbox" role="switch" id="watermarkMotion"></label>
-      <label class="switch"><span><b>Number clips / parts</b><small>Burn “PART 01 / 08” into each generated video, for both AI picks and sequential splits.</small></span><input type="checkbox" role="switch" id="partNumbers"></label>
+      <label class="switch part-number-setting"><span><b>Number clips / parts</b><small>Burn “PART 01 / 08” into each generated video, for both AI picks and sequential splits.</small></span><input type="checkbox" role="switch" id="partNumbers"></label>
     </div>
     <p class="formerr" id="formerr" role="alert"></p>
   </form>
@@ -562,7 +598,90 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const radio = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
 const jobsEl = $("#jobs");
+const PREF_STORAGE_KEY = "clipdude.formPreferences.v1";
+let hasSavedAspectPreference = false;
 let jobs = [];
+
+// Persist all usable form controls, including separate caption-style radio groups.
+// URLs and the file picker are intentionally excluded.
+function saveFormPreferences() {
+  const prefs = { mode: processingMode, aspectExplicit: hasSavedAspectPreference, subtitleCuts: readSubtitleCutRows() };
+  for (const el of $("#form").querySelectorAll("input, select, textarea")) {
+    if (el.type === "file" || el.type === "url") continue;
+    if (el.type === "radio") {
+      if (el.checked) prefs[`radio:${el.name}`] = el.value;
+    } else if (el.type === "checkbox") {
+      if (el.id) prefs[`field:${el.id}`] = el.checked;
+    } else if (el.id) {
+      prefs[`field:${el.id}`] = el.value;
+    }
+  }
+  try { localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(prefs)); } catch {}
+}
+
+function restoreFormPreferences() {
+  let prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem(PREF_STORAGE_KEY) || "{}"); } catch {}
+  for (const el of $("#form").querySelectorAll("input, select, textarea")) {
+    if (el.type === "file" || el.type === "url") continue;
+    if (el.type === "radio") {
+      if (prefs[`radio:${el.name}`] === el.value) el.checked = true;
+    } else if (el.id && Object.prototype.hasOwnProperty.call(prefs, `field:${el.id}`)) {
+      const value = prefs[`field:${el.id}`];
+      if (el.type === "checkbox") el.checked = !!value;
+      else if (el.tagName !== "SELECT" || [...el.options].some(o => o.value === value)) el.value = value;
+    }
+  }
+  hasSavedAspectPreference = !!prefs.aspectExplicit;
+  renderSubtitleCutRows(Array.isArray(prefs.subtitleCuts) ? prefs.subtitleCuts : []);
+  return prefs;
+}
+
+function readSubtitleCutRows() {
+  return [...$("#subtitleCuts").querySelectorAll("[data-cut-row]")].map(row => ({
+    start: row.querySelector("[data-cut-start]").value,
+    end: row.querySelector("[data-cut-end]").value,
+  }));
+}
+
+function renderSubtitleCutRows(rows) {
+  const host = $("#subtitleCuts");
+  host.innerHTML = (rows || []).map((range, i) => {
+    const start = range && typeof range === "object" ? range.start || "" : "";
+    const end = range && typeof range === "object" ? range.end || "" : "";
+    return `
+    <div class="cut-row" data-cut-row>
+      <div><label for="subtitleCutStart${i}">Remove from</label><input type="text" id="subtitleCutStart${i}" data-cut-start placeholder="mm:ss" value="${esc(start)}" autocomplete="off"></div>
+      <div><label for="subtitleCutEnd${i}">Remove to</label><input type="text" id="subtitleCutEnd${i}" data-cut-end placeholder="mm:ss" value="${esc(end)}" autocomplete="off"></div>
+      <button type="button" class="cut-remove" data-cut-remove aria-label="Remove cut range ${i + 1}">Remove</button>
+    </div>`;
+  }).join("");
+}
+
+$("#addSubtitleCut").addEventListener("click", () => {
+  const rows = readSubtitleCutRows();
+  rows.push({ start: "", end: "" });
+  renderSubtitleCutRows(rows);
+  const fields = $("#subtitleCuts").querySelectorAll("[data-cut-start]");
+  fields[fields.length - 1]?.focus();
+  saveFormPreferences();
+});
+$("#subtitleCuts").addEventListener("click", (event) => {
+  if (!event.target.closest("[data-cut-remove]")) return;
+  const row = event.target.closest("[data-cut-row]");
+  const rows = readSubtitleCutRows();
+  const index = [...$("#subtitleCuts").querySelectorAll("[data-cut-row]")].indexOf(row);
+  if (index >= 0) rows.splice(index, 1);
+  renderSubtitleCutRows(rows);
+  saveFormPreferences();
+});
+$("#subtitleCuts").addEventListener("input", saveFormPreferences);
+
+$("#form").addEventListener("input", saveFormPreferences);
+$("#form").addEventListener("change", (e) => {
+  if (e.target.name === "aspect") hasSavedAspectPreference = true;
+  saveFormPreferences();
+});
 let timer = null;
 
 async function api(path, opts) {
@@ -601,7 +720,11 @@ async function init() {
     }
     renderCaptionStyles(st.styles, st.style_looks || {}, "#style", "style", "captionStyle");
     renderCaptionStyles(st.styles, st.style_looks || {}, "#splitStyle", "splitStyle", "splitCaptionStyle");
+    renderCaptionStyles(st.styles, st.style_looks || {}, "#subtitleStyle", "subtitleStyle", "subtitleCaptionStyle");
     await populateModels(st.ollama_models || [], st.default_model || "");
+    const prefs = restoreFormPreferences();
+    setProcessingMode(["ai", "split", "subtitles"].includes(prefs.mode) ? prefs.mode : "ai");
+    saveFormPreferences();
 
   } catch (e) { $("#mode").textContent = "Server not reachable"; }
   await refresh();
@@ -654,7 +777,7 @@ function applyFold(jobId, i, c) {
   const folded = foldPref.get(key) || false;
   li.classList.toggle("folded", folded);
   const cs = li.querySelector("[data-cstat]");
-  if (cs) cs.textContent = `${Math.round(c.length)}s · ${c.aspect || "video"}`;
+  if (cs) cs.textContent = `${Math.round(c.length)}s · ${c.aspect_label || c.aspect || "video"}`;
 }
 function toggleFold(key) {
   const [jobId, i] = key.split(":");
@@ -677,7 +800,7 @@ async function refresh() {
   $("#go").disabled = active;
   $("#file").disabled = active;
   $("#url").disabled = active;
-  $("#go").textContent = active ? "Working…" : "Get clips";
+  $("#go").textContent = active ? "Working…" : processingMode === "split" ? "Split full video" : processingMode === "subtitles" ? "Add subtitles to full video" : "Get clips";
 }
 
 const scoreColor = (s) => (s >= 85 ? "var(--good)" : s >= 70 ? "var(--mid)" : "var(--low)");
@@ -689,7 +812,8 @@ function clipCard(c, jobId, i) {
   const copyText = [c.title, c.description, tags].filter(Boolean).join("\n\n");
   const score = Math.max(0, Math.min(100, Math.round(+c.score || 0)));
   const aspect = c.aspect || "9:16";
-  const shape = aspect.includes(":") ? (Number(aspect.split(":")[0]) > Number(aspect.split(":")[1]) ? "wide" : aspect === "1:1" ? "square" : "tall") : "tall";
+  const aspectLabel = c.aspect_label || aspect;
+  const shape = aspect.includes(":") ? (Number(aspect.split(":")[0]) > Number(aspect.split(":")[1]) ? "wide" : Number(aspect.split(":")[0]) === Number(aspect.split(":")[1]) ? "square" : "tall") : "tall";
   const key = `${jobId}:${i}`;
   return `<li class="clip" data-clip="${esc(key)}">
     <div class="compact">
@@ -709,7 +833,7 @@ function clipCard(c, jobId, i) {
       <div class="meta">
         <span class="rank">#${i + 1}</span>
         <span class="pill">${Math.round(c.length)}s</span>
-        <span class="pill">${esc(aspect)}</span>
+        <span class="pill">${esc(aspectLabel)}</span>
         <span class="scorebox" title="Score ${score} out of 100">
           <span class="meter" aria-hidden="true"><i style="width:${score}%;background:${scoreColor(score)}"></i></span>
           <b>${score}</b><small>${scoreWord(score)}</small>
@@ -736,8 +860,8 @@ function clipCard(c, jobId, i) {
 // The three stages the server goes through, by the overall percent it reports (see app/main.py).
 const STAGES = [
   { from: 0, to: 42, title: "Get the video", what: (j) => (j.upload ? "Reading your file and turning speech into text" : "Downloading and turning speech into text") },
-  { from: 42, to: 45, title: "Pick the best moments", what: () => "Reading the transcript and ranking moments by how well they'd hold a viewer" },
-  { from: 45, to: 100, title: "Cut, frame and caption", what: () => "Making each clip vertical and burning in captions" },
+  { from: 42, to: 45, title: "Prepare output", what: (j) => j.options?.mode === "subtitles" ? "Preparing the transcript for one continuous video" : "Reading the transcript and ranking moments" },
+  { from: 45, to: 100, title: "Render and caption", what: (j) => j.options?.mode === "subtitles" ? "Burning captions into the full video" : "Rendering video segments and burning in captions" },
 ];
 const stageOf = (j) => (j.status === "queued" ? -1 : STAGES.findIndex((s) => j.progress < s.to));
 
@@ -748,9 +872,10 @@ function jobProgressHtml(j) {
   const pct = Math.round(j.progress);
   const steps = STAGES.map((s, k) => {
     const state = k < cur ? "done" : k === cur ? "now" : "todo";
+    const title = k === 1 && j.options?.mode === "subtitles" ? "Prepare subtitles" : k === 2 && j.options?.mode === "subtitles" ? "Render full video" : s.title;
     return `<li class="stage ${state}" ${state === "now" ? 'aria-current="step"' : ""}>
       <div class="stage-top"><span class="stage-n" aria-hidden="true">${state === "done" ? ICON_CHECK : k + 1}</span>
-        <span class="stage-t">${s.title}<span class="sr-only">${state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (not started)"}</span></span></div>
+        <span class="stage-t">${title}<span class="sr-only">${state === "done" ? " (done)" : state === "now" ? " (in progress)" : " (not started)"}</span></span></div>
       <div class="stage-bar" aria-hidden="true"><i style="width:${state === "done" ? 100 : state === "now" ? stageFill(s, j.progress) : 0}%"></i></div>
     </li>`;
   }).join("");
@@ -763,7 +888,7 @@ function jobProgressHtml(j) {
         <span class="what">${esc(now ? now.what(j) : "Another video is being worked on first")}</span></div>
       <span class="pct" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">${pct}%</span>
     </div>
-    ${cur === 2 && j.clips.length ? `<div class="ready">${j.clips.length} clip${j.clips.length > 1 ? "s" : ""} ready below. You can watch them while the rest finish.</div>` : ""}
+    ${cur === 2 && j.clips.length ? `<div class="ready">${j.options?.mode === "subtitles" ? "Full video ready below." : `${j.clips.length} clip${j.clips.length > 1 ? "s" : ""} ready below. You can watch them while the rest finish.`}</div>` : ""}
   </div>`;
 }
 
@@ -792,7 +917,7 @@ function jobBlock(j, idx) {
   const open = isJobOpen(j, idx);
   const n = j.clips.length;
   const best = n ? Math.max(...j.clips.map((c) => Math.round(+c.score || 0))) : 0;
-  const picked = j.selection === "ollama" ? "Local AI picks" : j.selection === "claude" || j.selection === "gemini" ? "AI picks" : j.selection === "basic" ? "Basic scoring" : "";
+  const picked = j.selection === "subtitles" ? "Full-video subtitles" : j.selection === "sequential" ? "Sequential split" : j.selection === "ollama" ? "Local AI picks" : j.selection === "claude" || j.selection === "gemini" ? "AI picks" : j.selection === "basic" ? "Basic scoring" : "";
   const thumb = n ? `<img class="job-thumb" src="${esc(j.clips[0].thumb)}" alt="" loading="lazy">`
     : `<span class="job-thumb ph" aria-hidden="true">${busy ? '<span class="spin"></span>' : ICON_FILE}</span>`;
   const status = busy ? `<span class="badge run">${j.status === "queued" ? "Waiting" : "Working"}</span>`
@@ -803,10 +928,10 @@ function jobBlock(j, idx) {
     picked ? `<span class="chip">${ICON_SPARK}${picked}</span>` : "",
     j.transcript_source === "whisper" ? `<span class="chip">Transcribed from audio</span>` : "",
   ].join("");
+  const fullVideo = j.options?.mode === "subtitles";
   const stats = n ? `<dl class="stats">
-      <div><dt>Clips</dt><dd>${n}</dd></div>
-      
-      <div><dt>Best score</dt><dd style="color:${scoreColor(best)}">${best}</dd></div>
+      <div><dt>${fullVideo ? "Output" : "Clips"}</dt><dd>${fullVideo ? "1" : n}</dd></div>
+      <div><dt>${fullVideo ? "Duration" : "Best score"}</dt><dd${fullVideo ? "" : ` style="color:${scoreColor(best)}"`}>${fullVideo ? `${Math.round(+j.clips[0].length || 0)}s` : best}</dd></div>
     </dl>` : "";
   return `<section class="job${open ? "" : " closed"}" data-job="${esc(j.id)}" aria-labelledby="jt-${esc(j.id)}">
     <div class="jobhead">
@@ -859,7 +984,9 @@ function announceFinished() {
     const name = j.title || j.upload || "your video";
     if (j.status === "done") {
       const n = j.clips.length;
-      announce(`Finished: ${n} clip${n === 1 ? "" : "s"} ready from ${name}.`);
+      announce(j.options?.mode === "subtitles"
+        ? `Finished: full video with subtitles ready from ${name}.`
+        : `Finished: ${n} clip${n === 1 ? "" : "s"} ready from ${name}.`);
     } else if (j.status === "error") {
       announce(`Couldn't make clips from ${name}. ${j.error || ""}`);
     }
@@ -912,21 +1039,29 @@ function formError(msg, field) {
   $("#formerr").textContent = msg;
   if (field) { field.setAttribute("aria-invalid", "true"); field.focus(); }
 }
-for (const id of ["url", "from", "to"]) $("#" + id).addEventListener("input", (e) => e.target.removeAttribute("aria-invalid"));
+for (const id of ["url", "from", "to", "subtitleFrom", "subtitleTo"]) $("#" + id).addEventListener("input", (e) => e.target.removeAttribute("aria-invalid"));
 
 // Processing mode tabs: both modes reuse the same source picker and caption controls.
 let processingMode = "ai";
 function setProcessingMode(mode) {
   processingMode = mode;
   document.body.classList.toggle("split-mode", mode === "split");
-  $("#tabAI").classList.toggle("active", mode === "ai");
-  $("#tabSplit").classList.toggle("active", mode === "split");
-  $("#tabAI").setAttribute("aria-selected", String(mode === "ai"));
-  $("#tabSplit").setAttribute("aria-selected", String(mode === "split"));
-  $("#go").textContent = mode === "split" ? "Split full video" : "Get clips";
+  document.body.classList.toggle("subtitles-mode", mode === "subtitles");
+  for (const [id, value] of [["tabAI", "ai"], ["tabSplit", "split"], ["tabSubtitles", "subtitles"]]) {
+    const active = mode === value;
+    $("#" + id).classList.toggle("active", active);
+    $("#" + id).setAttribute("aria-selected", String(active));
+  }
+  $("#go").textContent = mode === "split" ? "Split full video" : mode === "subtitles" ? "Add subtitles to full video" : "Get clips";
+  if (mode === "subtitles" && !hasSavedAspectPreference) {
+    const original = document.querySelector('input[name="aspect"][value="original"]');
+    if (original) original.checked = true;
+  }
+  saveFormPreferences();
 }
 $("#tabAI").addEventListener("click", () => setProcessingMode("ai"));
 $("#tabSplit").addEventListener("click", () => setProcessingMode("split"));
+$("#tabSubtitles").addEventListener("click", () => setProcessingMode("subtitles"));
 
 // Remember the separate romanization controls in this browser.
 try {
@@ -944,13 +1079,36 @@ $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#formerr").textContent = "";
   const preset = radio("len").split("-").map(Number);
-  const min_len = $("#customMin").value ? Number($("#customMin").value) : preset[0];
-  const max_len = $("#customMax").value ? Number($("#customMax").value) : preset[1];
-  const clip_count = $("#customCount").value ? Number($("#customCount").value) : Number(radio("count"));
+  const min_len = processingMode === "ai" ? ($("#customMin").value ? Number($("#customMin").value) : preset[0]) : 30;
+  const max_len = processingMode === "ai" ? ($("#customMax").value ? Number($("#customMax").value) : preset[1]) : 60;
+  const clip_count = processingMode === "ai" ? ($("#customCount").value ? Number($("#customCount").value) : Number(radio("count"))) : 5;
   const file = $("#file").files[0];
   let start_time, end_time;
-  try { start_time = parseClock($("#from").value, "From"); } catch (err) { return formError(err.message, $("#from")); }
-  try { end_time = parseClock($("#to").value, "To"); } catch (err) { return formError(err.message, $("#to")); }
+  const startField = processingMode === "subtitles" ? $("#subtitleFrom") : $("#from");
+  const endField = processingMode === "subtitles" ? $("#subtitleTo") : $("#to");
+  try { start_time = parseClock(startField.value, "Start"); } catch (err) { return formError(err.message, startField); }
+  try { end_time = parseClock(endField.value, "End"); } catch (err) { return formError(err.message, endField); }
+  if (start_time !== null && end_time !== null && end_time <= start_time) return formError("End time must be after start time.", endField);
+  const cut_ranges = [];
+  if (processingMode === "subtitles") {
+    const cutRows = [...$("#subtitleCuts").querySelectorAll("[data-cut-row]")];
+    for (let i = 0; i < cutRows.length; i++) {
+      const startInput = cutRows[i].querySelector("[data-cut-start]");
+      const endInput = cutRows[i].querySelector("[data-cut-end]");
+      if (!startInput.value.trim() && !endInput.value.trim()) continue;
+      let cutStart, cutEnd;
+      try { cutStart = parseClock(startInput.value, `Cut ${i + 1} start`); } catch (err) { return formError(err.message, startInput); }
+      try { cutEnd = parseClock(endInput.value, `Cut ${i + 1} end`); } catch (err) { return formError(err.message, endInput); }
+      if (cutStart === null) return formError(`Enter a start time for cut ${i + 1}.`, startInput);
+      if (cutEnd === null) return formError(`Enter an end time for cut ${i + 1}.`, endInput);
+      if (cutEnd <= cutStart) return formError(`Cut ${i + 1} end time must be after its start time.`, endInput);
+      cut_ranges.push([cutStart, cutEnd]);
+    }
+    const sortedCuts = [...cut_ranges].sort((a, b) => a[0] - b[0]);
+    for (let i = 1; i < sortedCuts.length; i++) {
+      if (sortedCuts[i][0] < sortedCuts[i - 1][1]) return formError("Cut ranges cannot overlap. Combine or adjust the overlapping ranges.");
+    }
+  }
   if (!file && !$("#url").value.trim()) return formError("Paste a supported video URL or choose a video file.", $("#url"));
   if (!file && !$("#url").checkValidity()) return formError("That doesn't look like a link. It should start with https://", $("#url"));
   try {
@@ -958,9 +1116,9 @@ $("#form").addEventListener("submit", async (e) => {
       const fd = new FormData();
       fd.append("file", file);
       for (const [k, v] of Object.entries({
-        clip_count, min_len, max_len, mode: processingMode, segment_seconds: Number($("#segmentSeconds").value || 60),
-        style: radio(processingMode === "split" ? "splitStyle" : "style"), split_style: radio("splitStyle"), layout: $("#layout").value, aspect: radio("aspect"), hook: $("#hook").checked, trim_pauses: $("#trim").checked,
-        prompt: $("#prompt").value.trim(), start_time, end_time,
+        clip_count, min_len, max_len, mode: processingMode, segment_seconds: processingMode === "split" ? Number($("#segmentSeconds").value || 60) : 60,
+        style: radio(processingMode === "split" ? "splitStyle" : processingMode === "subtitles" ? "subtitleStyle" : "style"), split_style: radio("splitStyle"), subtitle_style: radio("subtitleStyle"), layout: $("#layout").value, aspect: radio("aspect"), hook: $("#hook").checked, trim_pauses: $("#trim").checked,
+        prompt: $("#prompt").value.trim(), start_time, end_time, cut_ranges: JSON.stringify(cut_ranges),
         romanize_captions: $("#romanize").checked, romanization_style: $("#romanizationStyle").value,
         romanization_model: $("#romanizationModel").value.trim(),
         ai_model: $("#aiModel").value,
@@ -988,7 +1146,7 @@ $("#form").addEventListener("submit", async (e) => {
         };
         xhr.onerror = () => reject(new Error("Upload failed. Is the app still running?"));
         xhr.send(fd);
-      }).finally(() => { $("#go").disabled = false; $("#go").textContent = processingMode === "split" ? "Split full video" : "Get clips"; });
+      }).finally(() => { $("#go").disabled = false; $("#go").textContent = processingMode === "split" ? "Split full video" : processingMode === "subtitles" ? "Add subtitles to full video" : "Get clips"; });
       clearFile();
       await refresh();
       return;
@@ -997,9 +1155,9 @@ $("#form").addEventListener("submit", async (e) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: $("#url").value.trim(), clip_count, min_len, max_len, mode: processingMode, segment_seconds: Number($("#segmentSeconds").value || 60),
-        style: radio(processingMode === "split" ? "splitStyle" : "style"), split_style: radio("splitStyle"), layout: $("#layout").value, aspect: radio("aspect"), hook: $("#hook").checked, trim_pauses: $("#trim").checked,
-        prompt: $("#prompt").value.trim(), start_time, end_time,
+        url: $("#url").value.trim(), clip_count, min_len, max_len, mode: processingMode, segment_seconds: processingMode === "split" ? Number($("#segmentSeconds").value || 60) : 60,
+        style: radio(processingMode === "split" ? "splitStyle" : processingMode === "subtitles" ? "subtitleStyle" : "style"), split_style: radio("splitStyle"), subtitle_style: radio("subtitleStyle"), layout: $("#layout").value, aspect: radio("aspect"), hook: $("#hook").checked, trim_pauses: $("#trim").checked,
+        prompt: $("#prompt").value.trim(), start_time, end_time, cut_ranges,
         romanize_captions: $("#romanize").checked, romanization_style: $("#romanizationStyle").value,
         romanization_model: $("#romanizationModel").value.trim(),
         ai_model: $("#aiModel").value,
